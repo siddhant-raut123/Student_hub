@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Hub Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "@google/generative-ai": "https://esm.run/@google/generative-ai"
+        }
+      }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans pb-20">
+
+    <div class="bg-blue-700 p-4 text-white shadow-lg sticky top-0 z-50 flex justify-between items-center">
+        <h1 class="font-bold text-lg"><i class="fa-solid fa-graduation-cap mr-2"></i>Student Hub</h1>
+        <button onclick="adminLogin()" class="text-blue-500 hover:text-white text-xs opacity-50">Admin</button>
+    </div>
+
+    <div class="flex justify-center my-4 bg-white p-2 shadow-sm sticky top-16 z-40">
+        <button onclick="showSection('notes')" id="tab-notes" class="px-6 py-2 rounded-full text-sm font-bold bg-blue-100 text-blue-700 mx-1">Library</button>
+        <button onclick="showSection('ai')" id="tab-ai" class="px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1">AI Tutor</button>
+    </div>
+
+    <div id="section-notes" class="px-4 space-y-4">
+        
+        <div id="admin-panel" class="hidden bg-red-50 border border-red-200 p-4 rounded-xl">
+            <h3 class="font-bold text-red-600 mb-2">Admin Upload Zone 🚀</h3>
+            <input type="file" id="fileInput" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200 mb-2"/>
+            <input type="text" id="fileName" placeholder="Display Name (e.g. Math Unit 1)" class="w-full p-2 border rounded-lg mb-2 text-sm">
+            <button onclick="uploadFile()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg shadow-md">Upload Now</button>
+            <p id="upload-status" class="text-xs mt-2 text-gray-600"></p>
+        </div>
+
+        <div id="file-list" class="space-y-3">
+            <p class="text-center text-gray-400 mt-10">Loading notes...</p>
+        </div>
+    </div>
+
+    <div id="section-ai" class="hidden flex flex-col h-[70vh] px-4">
+        <div id="chat-box" class="flex-1 overflow-y-auto bg-white border rounded-xl p-4 shadow-sm mb-3 space-y-3">
+            <div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">Hello! Ask me anything. 🤖</div>
+        </div>
+        <div class="flex gap-2">
+            <input id="user-input" type="text" placeholder="Ask AI..." class="flex-1 p-3 border rounded-full shadow-sm outline-none">
+            <button onclick="sendMessage()" class="bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><i class="fa-solid fa-paper-plane"></i></button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        // ⚠️ CONFIGURATION - PASTE KEYS HERE ⚠️
+        const SUPABASE_URL = "https://ckzvfupbktfbaokidces.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_nTq7kpOXsswlpTRl5KfdrA_jZk2XWrB";
+        const GEMINI_KEY = "AIzaSyA7J3cGk0qHAZVPD-wLLX6njcdmMHyndSg";
+
+        // Initialize Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        // --- 1. ADMIN FUNCTIONS ---
+        window.adminLogin = function() {
+            const pass = prompt("Enter Admin Password:");
+            if(pass === "admin123") { // You can change this password
+                document.getElementById('admin-panel').classList.remove('hidden');
+                alert("Welcome Admin! You can now upload.");
+            }
+        }
+
+        window.uploadFile = async function() {
+            const fileInput = document.getElementById('fileInput');
+            const nameInput = document.getElementById('fileName');
+            const status = document.getElementById('upload-status');
+            const file = fileInput.files[0];
+
+            if (!file) return alert("Select a file!");
+            
+            status.innerText = "Uploading... please wait ⏳";
+            
+            // Upload to Supabase Bucket 'notes'
+            const { data, error } = await supabase.storage.from('notes').upload('public/' + file.name, file);
+
+            if (error) {
+                status.innerText = "Error: " + error.message;
+            } else {
+                status.innerText = "Success! ✅";
+                // Save metadata (Optional: normally you'd save to a database, but here we just reload)
+                loadFiles(); 
+            }
+        }
+
+        // --- 2. LOAD FILES ---
+        async function loadFiles() {
+            const list = document.getElementById('file-list');
+            
+            // Get list of files from 'notes' bucket folder 'public'
+            const { data, error } = await supabase.storage.from('notes').list('public');
+
+            if (error || !data) {
+                list.innerHTML = "<p class='text-center text-red-400'>Could not load notes.</p>";
+                return;
+            }
+
+            if (data.length === 0) {
+                list.innerHTML = "<p class='text-center text-gray-400'>No notes uploaded yet.</p>";
+                return;
+            }
+
+            // Generate HTML for each file
+            list.innerHTML = data.map(file => {
+                // Get Public URL
+                const { data: { publicUrl } } = supabase.storage.from('notes').getPublicUrl('public/' + file.name);
+                
+                return `
+                <div class="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="bg-red-100 text-red-500 w-10 h-10 rounded-full flex items-center justify-center">
+                            <i class="fa-solid fa-file-pdf"></i>
+                        </div>
+                        <div>
+                            <p class="font-bold text-gray-800 text-sm">${file.name}</p>
+                            <p class="text-xs text-gray-500">${(file.metadata.size / 1024).toFixed(1)} KB</p>
+                        </div>
+                    </div>
+                    <a href="${publicUrl}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Download</a>
+                </div>`;
+            }).join('');
+        }
+
+        // Load files on startup
+        loadFiles();
+
+
+        // --- 3. AI LOGIC ---
+        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
+
+        window.sendMessage = async function() {
+            const input = document.getElementById('user-input');
+            const box = document.getElementById('chat-box');
+            const msg = input.value;
+            if(!msg) return;
+
+            box.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg text-sm text-right self-end ml-auto max-w-[80%]">${msg}</div>`;
+            input.value = "";
+            
+            try {
+                const result = await model.generateContent(msg);
+                const text = result.response.text().replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                box.innerHTML += `<div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 max-w-[90%]">${text}</div>`;
+            } catch(e) {
+                box.innerHTML += `<div class="text-red-500 text-xs">Error connecting to AI.</div>`;
+            }
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // --- 4. TABS LOGIC ---
+        window.showSection = function(id) {
+            document.getElementById('section-notes').classList.add('hidden');
+            document.getElementById('section-ai').classList.add('hidden');
+            document.getElementById('tab-notes').className = "px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1";
+            document.getElementById('tab-ai').className = "px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1";
+
+            document.getElementById('section-' + id).classList.remove('hidden');
+            document.getElementById('tab-' + id).className = "px-6 py-2 rounded-full text-sm font-bold bg-blue-100 text-blue-700 mx-1";
+            
+            if(id === 'ai') document.getElementById('section-ai').classList.add('flex');
+        }
+    </script>
+</body>
+</html>
