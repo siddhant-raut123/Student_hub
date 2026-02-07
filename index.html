@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Hub Pro</title>
+    <title>Student Hub (Debug Mode)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -15,342 +15,133 @@
       }
     </script>
 </head>
-<body class="bg-gray-50 min-h-screen font-sans pb-20">
-
-    <div class="bg-blue-700 p-4 text-white shadow-lg sticky top-0 z-50 flex justify-between items-center">
-        <h1 class="font-bold text-lg"><i class="fa-solid fa-graduation-cap mr-2"></i>Student Hub</h1>
-        <button onclick="adminLogin()" class="text-blue-500 hover:text-white text-xs opacity-50">Admin</button>
-    </div>
-
-    <div class="flex justify-center my-4 bg-white p-2 shadow-sm sticky top-16 z-40">
-        <button onclick="showSection('notes')" id="tab-notes" class="px-6 py-2 rounded-full text-sm font-bold bg-blue-100 text-blue-700 mx-1">Library</button>
-        <button onclick="showSection('ai')" id="tab-ai" class="px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1">AI Tutor</button>
-    </div>
-
-    <div id="section-notes" class="px-4 space-y-4">
-        
-        <div id="admin-panel" class="hidden bg-red-50 border border-red-200 p-4 rounded-xl">
-            <h3 class="font-bold text-red-600 mb-2">Admin Upload Zone 🚀</h3>
-            <input type="file" id="fileInput" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-100 file:text-red-700 hover:file:bg-red-200 mb-2"/>
-            <input type="text" id="fileName" placeholder="Display Name (e.g. Math Unit 1)" class="w-full p-2 border rounded-lg mb-2 text-sm">
-            <button onclick="uploadFile()" class="w-full bg-red-600 text-white font-bold py-2 rounded-lg shadow-md">Upload Now</button>
-            <p id="upload-status" class="text-xs mt-2 text-gray-600"></p>
-        </div>
-
-        <div id="file-list" class="space-y-3">
-            <p class="text-center text-gray-400 mt-10">Loading notes...</p>
-        </div>
-    </div>
-
-    <div id="section-ai" class="hidden flex flex-col h-[70vh] px-4">
-        <div id="chat-box" class="flex-1 overflow-y-auto bg-white border rounded-xl p-4 shadow-sm mb-3 space-y-3">
-            <div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800">Hello! Ask me anything. 🤖</div>
-        </div>
-        <div class="flex gap-2">
-            <input id="user-input" type="text" placeholder="Ask AI..." class="flex-1 p-3 border rounded-full shadow-sm outline-none">
-            <button onclick="sendMessage()" class="bg-blue-600 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg"><i class="fa-solid fa-paper-plane"></i></button>
-        </div>
-    </div>
-
-    <script type="module">
-        import { GoogleGenerativeAI } from "@google/generative-ai";
-
-        // ⚠️ CONFIGURATION - PASTE KEYS HERE ⚠️
-        const SUPABASE_URL = "https://ckzvfupbktfbaokidces.supabase.co";
-        const SUPABASE_KEY = "sb_publishable_nTq7kpOXsswlpTRl5KfdrA_jZk2XWrB";
-        const GEMINI_KEY = AIzaSyD82G4kQE9rqYA5L69yyr5gWo49R5Sr6f4
-
-        // Initialize Supabase
-        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        // --- 1. ADMIN FUNCTIONS ---
-        window.adminLogin = function() {
-            const pass = prompt("Enter Admin Password:");
-            if(pass === "admin123") { // You can change this password
-                document.getElementById('admin-panel').classList.remove('hidden');
-                alert("Welcome Admin! You can now upload.");
-            }
-        }
-
-        window.uploadFile = async function() {
-            const fileInput = document.getElementById('fileInput');
-            const nameInput = document.getElementById('fileName');
-            const status = document.getElementById('upload-status');
-            const file = fileInput.files[0];
-
-            if (!file) return alert("Select a file!");
-            
-            status.innerText = "Uploading... please wait ⏳";
-            
-            // Upload to Supabase Bucket 'notes'
-            const { data, error } = await supabase.storage.from('notes').upload('public/' + file.name, file);
-
-            if (error) {
-                status.innerText = "Error: " + error.message;
-            } else {
-                status.innerText = "Success! ✅";
-                // Save metadata (Optional: normally you'd save to a database, but here we just reload)
-                loadFiles(); 
-            }
-        }
-
-        // --- 2. LOAD FILES ---
-        async function loadFiles() {
-            const list = document.getElementById('file-list');
-            
-            // Get list of files from 'notes' bucket folder 'public'
-            const { data, error } = await supabase.storage.from('notes').list('public');
-
-            if (error || !data) {
-                list.innerHTML = "<p class='text-center text-red-400'>Could not load notes.</p>";
-                return;
-            }
-
-            if (data.length === 0) {
-                list.innerHTML = "<p class='text-center text-gray-400'>No notes uploaded yet.</p>";
-                return;
-            }
-
-            // Generate HTML for each file
-            list.innerHTML = data.map(file => {
-                // Get Public URL
-                const { data: { publicUrl } } = supabase.storage.from('notes').getPublicUrl('public/' + file.name);
-                
-                return `
-                <div class="bg-white p-4 rounded-xl shadow-sm border flex justify-between items-center">
-                    <div class="flex items-center gap-3">
-                        <div class="bg-red-100 text-red-500 w-10 h-10 rounded-full flex items-center justify-center">
-                            <i class="fa-solid fa-file-pdf"></i>
-                        </div>
-                        <div>
-                            <p class="font-bold text-gray-800 text-sm">${file.name}</p>
-                            <p class="text-xs text-gray-500">${(file.metadata.size / 1024).toFixed(1)} KB</p>
-                        </div>
-                    </div>
-                    <a href="${publicUrl}" target="_blank" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold">Download</a>
-                </div>`;
-            }).join('');
-        }
-
-        // Load files on startup
-        loadFiles();
-
-
-        // --- 3. AI LOGIC ---
-        const genAI = new GoogleGenerativeAI(GEMINI_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash"});
-
-        window.sendMessage = async function() {
-            const input = document.getElementById('user-input');
-            const box = document.getElementById('chat-box');
-            const msg = input.value;
-            if(!msg) return;
-
-            box.innerHTML += `<div class="bg-gray-100 p-3 rounded-lg text-sm text-right self-end ml-auto max-w-[80%]">${msg}</div>`;
-            input.value = "";
-            
-            try {
-                const result = await model.generateContent(msg);
-                const text = result.response.text().replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
-                box.innerHTML += `<div class="bg-blue-50 p-3 rounded-lg text-sm text-blue-800 max-w-[90%]">${text}</div>`;
-            } catch(e) {
-                box.innerHTML += `<div class="text-red-500 text-xs">Error connecting to AI.</div>`;
-            }
-            box.scrollTop = box.scrollHeight;
-        }
-
-        // --- 4. TABS LOGIC ---
-        window.showSection = function(id) {
-            document.getElementById('section-notes').classList.add('hidden');
-            document.getElementById('section-ai').classList.add('hidden');
-            document.getElementById('tab-notes').className = "px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1";
-            document.getElementById('tab-ai').className = "px-6 py-2 rounded-full text-sm font-bold text-gray-500 hover:bg-gray-100 mx-1";
-
-            document.getElementById('section-' + id).classList.remove('hidden');
-            document.getElementById('tab-' + id).className = "px-6 py-2 rounded-full text-sm font-bold bg-blue-100 text-blue-700 mx-1";
-            
-            if(id === 'ai') document.getElementById('section-ai').classList.add('flex');
-        }
-    </script>
-</body>
-</html>
-Hi
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Hub (Admin Mode)</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
 <body class="bg-gray-100 h-screen flex flex-col font-sans">
 
     <div class="bg-indigo-700 p-4 text-white shadow-lg flex justify-between items-center z-10">
-        <h1 class="font-bold text-lg flex items-center gap-2">
-            <i class="fa-solid fa-user-graduate"></i> Student Hub
-        </h1>
-        
-        <button onclick="adminLogin()" id="admin-btn" class="text-xs bg-indigo-800 hover:bg-red-600 px-2 py-1 rounded transition text-indigo-300 hover:text-white">
-            <i class="fa-solid fa-lock"></i> Admin
+        <h1 class="font-bold text-lg"><i class="fa-solid fa-graduation-cap"></i> Student Hub</h1>
+        <button onclick="testConnection()" class="bg-red-500 text-white text-xs px-2 py-1 rounded font-bold border border-red-700 hover:bg-red-600">
+             Test System 🛠️
         </button>
     </div>
 
-    <div class="flex-1 flex flex-col overflow-hidden">
-        
-        <div id="message-container" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-            <div class="text-center text-gray-400 text-xs mt-4">
-                <p>Welcome to the Class Chat 👋</p>
-                <p>Be polite! Admin is watching.</p>
-            </div>
-        </div>
+    <div id="debug-log" class="hidden bg-black text-green-400 text-xs p-2 font-mono h-24 overflow-y-scroll border-b-4 border-red-500">
+        > System Ready...
+    </div>
 
-        <div id="admin-panel" class="hidden bg-red-100 p-2 text-center text-xs text-red-700 font-bold border-t border-red-200">
-            ⚠️ ADMIN MODE ACTIVE: You can Delete messages & Ban users.
+    <div class="flex-1 flex flex-col overflow-hidden relative">
+        <div id="message-container" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+            <div class="text-center text-gray-400 text-xs mt-4">Welcome to Class Chat 👋</div>
         </div>
 
         <div class="p-3 bg-white border-t shadow-lg flex gap-2 items-center">
-            <input id="chat-username" type="text" placeholder="Your Name" class="w-24 p-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500">
-            <input id="chat-input" type="text" placeholder="Type a message..." class="flex-1 p-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500">
-            <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white w-10 h-10 rounded-lg shadow-md transition transform active:scale-95">
+            <input id="chat-username" type="text" placeholder="Name" class="w-20 p-2 border rounded-lg text-sm bg-gray-50">
+            <input id="chat-input" type="text" placeholder="Type a message..." class="flex-1 p-2 border rounded-lg text-sm bg-gray-50">
+            <button onclick="sendChatMessage()" class="bg-indigo-600 text-white w-10 h-10 rounded-lg shadow-md">
                 <i class="fa-solid fa-paper-plane"></i>
             </button>
         </div>
     </div>
 
     <script type="module">
-        // ⚠️ PASTE YOUR SUPABASE KEYS HERE ⚠️
+        import { GoogleGenerativeAI } from "@google/generative-ai";
+
+        // ⚠️ PASTE KEYS HERE ⚠️
         const SUPABASE_URL = "https://ckzvfupbktfbaokidces.supabase.co";
         const SUPABASE_KEY = "sb_publishable_nTq7kpOXsswlpTRl5KfdrA_jZk2XWrB";
-        
+        const GEMINI_KEY =   "AIzaSyD82G4kQE9rqYA5L69yyr5gWo49R5Sr6f4";
+
+        // Initialize Supabase
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        let isAdmin = false;
 
-        // --- 1. SEND MESSAGE ---
+        // --- 1. SYSTEM TEST (Click the Red Button) ---
+        window.testConnection = async function() {
+            const log = document.getElementById('debug-log');
+            log.classList.remove('hidden');
+            log.innerHTML += "<br>> Testing Supabase Connection...";
+            
+            // Check Messages Table
+            const { data, error } = await supabase.from('messages').select('*').limit(1);
+            if(error) {
+                alert("❌ SUPABASE ERROR:\n" + error.message + "\n\nHint: Check RLS or Table Name.");
+                log.innerHTML += "<br>> ❌ Supabase Failed: " + error.message;
+            } else {
+                alert("✅ Supabase Connected!\nTable 'messages' found.");
+                log.innerHTML += "<br>> ✅ Supabase OK.";
+            }
+
+            // Check AI Key
+            if(GEMINI_KEY.includes("PASTE") || GEMINI_KEY.length < 10) {
+                 log.innerHTML += "<br>> ⚠️ Gemini Key looks wrong.";
+                 alert("⚠️ Gemini Key is missing or invalid.");
+            }
+        }
+
+        // --- 2. SEND MESSAGE (Fixed) ---
         window.sendChatMessage = async function() {
-            const username = document.getElementById('chat-username').value.trim();
+            const username = document.getElementById('chat-username').value.trim() || "Student";
             const content = document.getElementById('chat-input').value.trim();
+            if (!content) return;
 
-            if (!content || !username) {
-                alert("Please enter your name and message!");
-                return;
+            try {
+                // 1. Try to check ban status (Safe Mode)
+                // If table is missing, we ignore the error and let them chat anyway
+                const { data: banned, error: banError } = await supabase
+                    .from('banned_users')
+                    .select('*')
+                    .eq('name', username)
+                    .single();
+                
+                if (banned) {
+                    alert("🚫 You are banned.");
+                    return;
+                }
+            } catch (err) {
+                console.log("Ban check skipped (Table might be missing)");
             }
 
-            // CHECK IF BANNED
-            const { data: bannedUser } = await supabase
-                .from('banned_users')
-                .select('*')
-                .eq('name', username)
-                .single();
-
-            if (bannedUser) {
-                alert("🚫 YOU ARE BANNED! You cannot send messages.");
-                return;
-            }
-
-            // SEND MESSAGE
+            // 2. Send Message
             const { error } = await supabase
                 .from('messages')
                 .insert([{ username: username, content: content }]);
 
-            if (error) console.error("Error:", error);
-            document.getElementById('chat-input').value = ""; 
-        }
-
-        // --- 2. ADMIN ACTIONS ---
-        
-        // Login
-        window.adminLogin = function() {
-            const pass = prompt("Enter Admin Password:");
-            if(pass === "admin123") { // CHANGE THIS PASSWORD!
-                isAdmin = true;
-                document.getElementById('admin-panel').classList.remove('hidden');
-                document.getElementById('admin-btn').classList.add('bg-red-600', 'text-white');
-                document.getElementById('admin-btn').innerText = "Admin Active";
-                loadMessages(); // Reload to show delete buttons
-                alert("Admin Mode ON 👮‍♂️");
+            if (error) {
+                alert("❌ Send Failed: " + error.message); // SHOW ERROR ON SCREEN
             } else {
-                alert("Wrong Password!");
+                document.getElementById('chat-input').value = "";
             }
         }
 
-        // Delete Message
-        window.deleteMessage = async function(id) {
-            if(!confirm("Are you sure you want to delete this message?")) return;
-            
-            const { error } = await supabase
-                .from('messages')
-                .delete()
-                .eq('id', id);
-                
-            if(error) alert("Error deleting: " + error.message);
-            else document.getElementById(`msg-${id}`).remove();
-        }
-
-        // Ban User
-        window.banUser = async function(name) {
-            if(!confirm(`Do you want to PERMANENTLY BAN "${name}"?`)) return;
-
-            const { error } = await supabase
-                .from('banned_users')
-                .insert([{ name: name }]);
-
-            if(error) alert("Error banning: " + error.message);
-            else alert(`${name} has been banned! 🚫`);
-        }
-
-
-        // --- 3. REALTIME CHAT ---
+        // --- 3. REALTIME LISTENER ---
         const channel = supabase
             .channel('public:messages')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
                 displayMessage(payload.new);
             })
-            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, payload => {
-                // Remove deleted message from screen instantly
-                const msgDiv = document.getElementById(`msg-${payload.old.id}`);
-                if(msgDiv) msgDiv.remove();
-            })
-            .subscribe();
+            .subscribe((status) => {
+                if(status === 'SUBSCRIBED') {
+                    console.log("Realtime Connected");
+                }
+            });
 
+        // Load old messages
         async function loadMessages() {
-            document.getElementById('message-container').innerHTML = ''; // Clear first
-            const { data, error } = await supabase
-                .from('messages')
-                .select('*')
-                .order('created_at', { ascending: true })
-                .limit(50);
-
-            if (data) data.forEach(msg => displayMessage(msg));
+            const { data, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true }).limit(50);
+            if(data) data.forEach(msg => displayMessage(msg));
+            if(error) document.getElementById('debug-log').innerHTML += "<br>> Load Error: " + error.message;
         }
 
         function displayMessage(msg) {
             const container = document.getElementById('message-container');
-            const myName = document.getElementById('chat-username').value;
+            const myName = document.getElementById('chat-username').value || "Student";
             const isMe = msg.username === myName;
             
-            // Admin Controls HTML (Only if isAdmin is true)
-            const adminControls = isAdmin ? `
-                <div class="flex gap-2 mt-1 opacity-80">
-                    <button onclick="deleteMessage('${msg.id}')" class="text-xs text-red-500 hover:text-red-700 bg-red-100 px-2 py-1 rounded">
-                        <i class="fa-solid fa-trash"></i> Delete
-                    </button>
-                    <button onclick="banUser('${msg.username}')" class="text-xs text-gray-500 hover:text-black bg-gray-200 px-2 py-1 rounded">
-                        <i class="fa-solid fa-ban"></i> Ban
-                    </button>
-                </div>
-            ` : '';
-
             const html = `
-                <div id="msg-${msg.id}" class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-3">
-                    <span class="text-[10px] text-gray-400 px-1 font-bold">${msg.username}</span>
-                    <div class="${isMe ? 'bg-indigo-600 text-white' : 'bg-white text-gray-800 border shadow-sm'} px-4 py-2 rounded-2xl ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'} text-sm max-w-[85%] break-words">
+                <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                    <span class="text-[10px] text-gray-400 px-1">${msg.username}</span>
+                    <div class="${isMe ? 'bg-indigo-600 text-white' : 'bg-white text-gray-800 border'} px-4 py-2 rounded-2xl text-sm max-w-[85%]">
                         ${msg.content}
                     </div>
-                    ${adminControls}
                 </div>`;
-            
             container.insertAdjacentHTML('beforeend', html);
             container.scrollTop = container.scrollHeight;
         }
@@ -359,5 +150,6 @@ Hi
     </script>
 </body>
 </html>
+
 
 
