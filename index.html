@@ -174,4 +174,189 @@
     </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Hub (Admin Mode)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col font-sans">
+
+    <div class="bg-indigo-700 p-4 text-white shadow-lg flex justify-between items-center z-10">
+        <h1 class="font-bold text-lg flex items-center gap-2">
+            <i class="fa-solid fa-user-graduate"></i> Student Hub
+        </h1>
+        
+        <button onclick="adminLogin()" id="admin-btn" class="text-xs bg-indigo-800 hover:bg-red-600 px-2 py-1 rounded transition text-indigo-300 hover:text-white">
+            <i class="fa-solid fa-lock"></i> Admin
+        </button>
+    </div>
+
+    <div class="flex-1 flex flex-col overflow-hidden">
+        
+        <div id="message-container" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+            <div class="text-center text-gray-400 text-xs mt-4">
+                <p>Welcome to the Class Chat 👋</p>
+                <p>Be polite! Admin is watching.</p>
+            </div>
+        </div>
+
+        <div id="admin-panel" class="hidden bg-red-100 p-2 text-center text-xs text-red-700 font-bold border-t border-red-200">
+            ⚠️ ADMIN MODE ACTIVE: You can Delete messages & Ban users.
+        </div>
+
+        <div class="p-3 bg-white border-t shadow-lg flex gap-2 items-center">
+            <input id="chat-username" type="text" placeholder="Your Name" class="w-24 p-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500">
+            <input id="chat-input" type="text" placeholder="Type a message..." class="flex-1 p-2 border rounded-lg text-sm bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500">
+            <button onclick="sendChatMessage()" class="bg-indigo-600 hover:bg-indigo-700 text-white w-10 h-10 rounded-lg shadow-md transition transform active:scale-95">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        // ⚠️ PASTE YOUR SUPABASE KEYS HERE ⚠️
+        const SUPABASE_URL = "https://ckzvfupbktfbaokidces.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_nTq7kpOXsswlpTRl5KfdrA_jZk2XWrB";
+        
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        let isAdmin = false;
+
+        // --- 1. SEND MESSAGE ---
+        window.sendChatMessage = async function() {
+            const username = document.getElementById('chat-username').value.trim();
+            const content = document.getElementById('chat-input').value.trim();
+
+            if (!content || !username) {
+                alert("Please enter your name and message!");
+                return;
+            }
+
+            // CHECK IF BANNED
+            const { data: bannedUser } = await supabase
+                .from('banned_users')
+                .select('*')
+                .eq('name', username)
+                .single();
+
+            if (bannedUser) {
+                alert("🚫 YOU ARE BANNED! You cannot send messages.");
+                return;
+            }
+
+            // SEND MESSAGE
+            const { error } = await supabase
+                .from('messages')
+                .insert([{ username: username, content: content }]);
+
+            if (error) console.error("Error:", error);
+            document.getElementById('chat-input').value = ""; 
+        }
+
+        // --- 2. ADMIN ACTIONS ---
+        
+        // Login
+        window.adminLogin = function() {
+            const pass = prompt("Enter Admin Password:");
+            if(pass === "admin123") { // CHANGE THIS PASSWORD!
+                isAdmin = true;
+                document.getElementById('admin-panel').classList.remove('hidden');
+                document.getElementById('admin-btn').classList.add('bg-red-600', 'text-white');
+                document.getElementById('admin-btn').innerText = "Admin Active";
+                loadMessages(); // Reload to show delete buttons
+                alert("Admin Mode ON 👮‍♂️");
+            } else {
+                alert("Wrong Password!");
+            }
+        }
+
+        // Delete Message
+        window.deleteMessage = async function(id) {
+            if(!confirm("Are you sure you want to delete this message?")) return;
+            
+            const { error } = await supabase
+                .from('messages')
+                .delete()
+                .eq('id', id);
+                
+            if(error) alert("Error deleting: " + error.message);
+            else document.getElementById(`msg-${id}`).remove();
+        }
+
+        // Ban User
+        window.banUser = async function(name) {
+            if(!confirm(`Do you want to PERMANENTLY BAN "${name}"?`)) return;
+
+            const { error } = await supabase
+                .from('banned_users')
+                .insert([{ name: name }]);
+
+            if(error) alert("Error banning: " + error.message);
+            else alert(`${name} has been banned! 🚫`);
+        }
+
+
+        // --- 3. REALTIME CHAT ---
+        const channel = supabase
+            .channel('public:messages')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                displayMessage(payload.new);
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, payload => {
+                // Remove deleted message from screen instantly
+                const msgDiv = document.getElementById(`msg-${payload.old.id}`);
+                if(msgDiv) msgDiv.remove();
+            })
+            .subscribe();
+
+        async function loadMessages() {
+            document.getElementById('message-container').innerHTML = ''; // Clear first
+            const { data, error } = await supabase
+                .from('messages')
+                .select('*')
+                .order('created_at', { ascending: true })
+                .limit(50);
+
+            if (data) data.forEach(msg => displayMessage(msg));
+        }
+
+        function displayMessage(msg) {
+            const container = document.getElementById('message-container');
+            const myName = document.getElementById('chat-username').value;
+            const isMe = msg.username === myName;
+            
+            // Admin Controls HTML (Only if isAdmin is true)
+            const adminControls = isAdmin ? `
+                <div class="flex gap-2 mt-1 opacity-80">
+                    <button onclick="deleteMessage('${msg.id}')" class="text-xs text-red-500 hover:text-red-700 bg-red-100 px-2 py-1 rounded">
+                        <i class="fa-solid fa-trash"></i> Delete
+                    </button>
+                    <button onclick="banUser('${msg.username}')" class="text-xs text-gray-500 hover:text-black bg-gray-200 px-2 py-1 rounded">
+                        <i class="fa-solid fa-ban"></i> Ban
+                    </button>
+                </div>
+            ` : '';
+
+            const html = `
+                <div id="msg-${msg.id}" class="flex flex-col ${isMe ? 'items-end' : 'items-start'} mb-3">
+                    <span class="text-[10px] text-gray-400 px-1 font-bold">${msg.username}</span>
+                    <div class="${isMe ? 'bg-indigo-600 text-white' : 'bg-white text-gray-800 border shadow-sm'} px-4 py-2 rounded-2xl ${isMe ? 'rounded-tr-none' : 'rounded-tl-none'} text-sm max-w-[85%] break-words">
+                        ${msg.content}
+                    </div>
+                    ${adminControls}
+                </div>`;
+            
+            container.insertAdjacentHTML('beforeend', html);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        loadMessages();
+    </script>
+</body>
+</html>
+
 
