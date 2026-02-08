@@ -150,6 +150,94 @@
     </script>
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Hub (Local Mode)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" />
+</head>
+<body class="bg-gray-100 h-screen flex flex-col font-sans">
+
+    <div class="bg-green-700 p-4 text-white shadow-lg flex justify-between items-center z-10">
+        <h1 class="font-bold text-lg"><i class="fa-solid fa-graduation-cap"></i> Student Hub</h1>
+        <span class="text-xs bg-green-900 px-2 py-1 rounded">Offline Mode ✅</span>
+    </div>
+
+    <div class="flex-1 flex flex-col overflow-hidden relative">
+        <div id="message-container" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
+            <div class="text-center text-gray-400 text-xs mt-4">
+                Chat is running in Local Mode.<br>Messages are saved on your phone.
+            </div>
+        </div>
+
+        <div class="p-3 bg-white border-t shadow-lg flex gap-2 items-center">
+            <input id="chat-username" type="text" placeholder="Name" class="w-20 p-2 border rounded-lg text-sm bg-gray-50">
+            <input id="chat-input" type="text" placeholder="Type a message..." class="flex-1 p-2 border rounded-lg text-sm bg-gray-50">
+            <button onclick="sendMessage()" class="bg-green-600 text-white w-10 h-10 rounded-lg shadow-md hover:bg-green-700">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 1. LOAD MESSAGES FROM PHONE MEMORY
+        const savedMessages = JSON.parse(localStorage.getItem('local_messages')) || [];
+        const container = document.getElementById('message-container');
+
+        function loadMessages() {
+            container.innerHTML = '<div class="text-center text-gray-400 text-xs mt-4">Welcome to Class Chat 👋</div>';
+            savedMessages.forEach(msg => displayMessage(msg));
+        }
+
+        // 2. DISPLAY MESSAGE FUNCTION
+        function displayMessage(msg) {
+            const myName = document.getElementById('chat-username').value || "Student";
+            const isMe = msg.username === myName;
+            
+            const html = `
+                <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'}">
+                    <span class="text-[10px] text-gray-400 px-1">${msg.username}</span>
+                    <div class="${isMe ? 'bg-green-600 text-white' : 'bg-white text-gray-800 border'} px-4 py-2 rounded-2xl text-sm max-w-[85%] shadow-sm">
+                        ${msg.content}
+                    </div>
+                </div>`;
+            container.insertAdjacentHTML('beforeend', html);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // 3. SEND MESSAGE (SAVES TO PHONE)
+        function sendMessage() {
+            const username = document.getElementById('chat-username').value.trim() || "Student";
+            const content = document.getElementById('chat-input').value.trim();
+            
+            if (!content) return;
+
+            // Create Message Object
+            const newMessage = {
+                username: username,
+                content: content,
+                id: Date.now()
+            };
+
+            // Save to Array and LocalStorage
+            savedMessages.push(newMessage);
+            localStorage.setItem('local_messages', JSON.stringify(savedMessages));
+
+            // Show on Screen
+            displayMessage(newMessage);
+            
+            // Clear Input
+            document.getElementById('chat-input').value = "";
+        }
+
+        // Load initially
+        loadMessages();
+    </script>
+</body>
+</html>
 
 
 
